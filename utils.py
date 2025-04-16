@@ -25,6 +25,20 @@ def format_number(value, suffix=''):
 
 def create_evolution_chart(df, metric, title):
     """Cria gráfico de evolução temporal."""
+    # Verifica se as colunas necessárias existem
+    if 'date' not in df.columns:
+        st.error("❌ A coluna 'date' não foi encontrada no arquivo.")
+        return None
+        
+    if metric not in df.columns:
+        st.error(f"❌ A coluna '{metric}' não foi encontrada no arquivo.")
+        return None
+    
+    # Seleciona apenas dados numéricos para o gráfico
+    if not pd.api.types.is_numeric_dtype(df[metric]):
+        st.error(f"❌ A coluna '{metric}' não contém dados numéricos válidos.")
+        return None
+    
     fig = px.line(
         df,
         x='date',
@@ -43,8 +57,25 @@ def create_evolution_chart(df, metric, title):
 
 def create_comparison_chart(df, metric, dimension, title):
     """Cria gráfico de comparação entre dimensões."""
+    # Verifica se as colunas necessárias existem
+    if dimension not in df.columns:
+        st.error(f"❌ A coluna '{dimension}' não foi encontrada no arquivo.")
+        return None
+        
+    if metric not in df.columns:
+        st.error(f"❌ A coluna '{metric}' não foi encontrada no arquivo.")
+        return None
+    
+    # Seleciona apenas dados numéricos para o gráfico
+    if not pd.api.types.is_numeric_dtype(df[metric]):
+        st.error(f"❌ A coluna '{metric}' não contém dados numéricos válidos.")
+        return None
+    
+    # Agrupa os dados
+    df_grouped = df.groupby(dimension)[metric].sum().reset_index()
+    
     fig = px.bar(
-        df,
+        df_grouped,
         x=dimension,
         y=metric,
         title=title,
@@ -257,40 +288,66 @@ def calculate_kpis(df):
     """Calcula KPIs principais."""
     kpis = {}
     
-    # Verifica cada métrica antes de calcular
-    if 'impressions' in df.columns:
-        kpis['Impressões'] = df['impressions'].sum()
+    # Verifica se temos a coluna campaign
+    if 'campaign' not in df.columns:
+        st.error("❌ A coluna 'campaign' não foi encontrada no arquivo.")
+        return kpis
+    
+    # Seleciona apenas colunas numéricas para agregação
+    numeric_columns = df.select_dtypes(include=['int64', 'float64']).columns
+    metrics_to_sum = [col for col in numeric_columns if col != 'date']
+    
+    # Agrupa por campanha apenas as métricas numéricas
+    if metrics_to_sum:
+        df_grouped = df.groupby('campaign')[metrics_to_sum].sum().reset_index()
+    else:
+        st.warning("⚠️ Nenhuma coluna numérica encontrada para agregação.")
+        return kpis
+    
+    # Calcula KPIs com verificação de existência das colunas
+    if 'impressions' in df_grouped.columns:
+        kpis['Impressões'] = df_grouped['impressions'].sum()
     else:
         kpis['Impressões'] = 0
         
-    if 'clicks' in df.columns:
-        kpis['Cliques'] = df['clicks'].sum()
+    if 'clicks' in df_grouped.columns:
+        kpis['Cliques'] = df_grouped['clicks'].sum()
     else:
         kpis['Cliques'] = 0
         
-    if 'clicks' in df.columns and 'impressions' in df.columns and df['impressions'].sum() > 0:
-        kpis['CTR'] = (df['clicks'].sum() / df['impressions'].sum() * 100)
+    if all(col in df_grouped.columns for col in ['clicks', 'impressions']) and df_grouped['impressions'].sum() > 0:
+        kpis['CTR'] = (df_grouped['clicks'].sum() / df_grouped['impressions'].sum() * 100)
     else:
         kpis['CTR'] = 0
         
-    if 'cost' in df.columns and 'clicks' in df.columns and df['clicks'].sum() > 0:
-        kpis['CPC Médio'] = df['cost'].sum() / df['clicks'].sum()
+    if all(col in df_grouped.columns for col in ['cost', 'clicks']) and df_grouped['clicks'].sum() > 0:
+        kpis['CPC Médio'] = df_grouped['cost'].sum() / df_grouped['clicks'].sum()
     else:
         kpis['CPC Médio'] = 0
         
-    if 'conversions' in df.columns:
-        kpis['Conversões'] = df['conversions'].sum()
+    if 'conversions' in df_grouped.columns:
+        kpis['Conversões'] = df_grouped['conversions'].sum()
     else:
         kpis['Conversões'] = 0
         
-    if 'cost' in df.columns:
-        kpis['Custo Total'] = df['cost'].sum()
+    if 'cost' in df_grouped.columns:
+        kpis['Custo Total'] = df_grouped['cost'].sum()
     else:
         kpis['Custo Total'] = 0
         
-    if 'conversion_value' in df.columns and 'cost' in df.columns and df['cost'].sum() > 0:
-        kpis['ROAS'] = df['conversion_value'].sum() / df['cost'].sum()
+    if all(col in df_grouped.columns for col in ['conversion_value', 'cost']) and df_grouped['cost'].sum() > 0:
+        kpis['ROAS'] = df_grouped['conversion_value'].sum() / df_grouped['cost'].sum()
     else:
         kpis['ROAS'] = 0
         
+    # Adiciona métricas adicionais se disponíveis
+    if 'frequency' in df_grouped.columns:
+        kpis['Frequência Média'] = df_grouped['frequency'].mean()
+        
+    if 'cpm' in df_grouped.columns:
+        kpis['CPM Médio'] = df_grouped['cpm'].mean()
+        
+    if 'cost_per_conversion' in df_grouped.columns and df_grouped['cost_per_conversion'].sum() > 0:
+        kpis['Custo por Conversão Médio'] = df_grouped['cost_per_conversion'].mean()
+    
     return kpis 
