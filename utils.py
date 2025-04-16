@@ -117,6 +117,10 @@ def map_csv_columns(df):
         "dia": "date",
         "data": "date",
         "data do relatório": "date",
+        "início": "start_date",
+        "término": "end_date",
+        "início dos relatórios": "report_start_date",
+        "término dos relatórios": "report_end_date",
         "cliques no link": "clicks",
         "cliques": "clicks",
         "cliques totais": "clicks",
@@ -129,12 +133,20 @@ def map_csv_columns(df):
         "resultados": "conversions",
         "conversões": "conversions",
         "ações": "conversions",
+        "tipo de resultado": "conversion_type",
+        "custo por resultado": "cost_per_conversion",
         "valor de conversão": "conversion_value",
         "valor das conversões": "conversion_value",
         "retorno": "conversion_value",
         "impressões": "impressions",
         "visualizações": "impressions",
-        "alcance": "impressions"
+        "alcance": "impressions",
+        "frequência": "frequency",
+        "cpm (custo por 1.000 impressões)": "cpm",
+        "objetivo": "objective",
+        "veiculação da campanha": "campaign_delivery",
+        "orçamento da campanha": "campaign_budget",
+        "tipo de orçamento da campanha": "campaign_budget_type"
     }
     
     # Tenta mapear cada coluna
@@ -154,6 +166,13 @@ def map_csv_columns(df):
     
     # Aplica o mapeamento
     df_mapped = df.rename(columns=mapped_columns)
+    
+    # Verifica se as colunas essenciais existem, se não, cria com valores zero
+    essential_columns = ['cost', 'clicks', 'impressions', 'conversions', 'conversion_value']
+    for col in essential_columns:
+        if col not in df_mapped.columns:
+            st.warning(f"Arquivo não contém a coluna: {col}")
+            df_mapped[col] = 0
     
     def clean_numeric(x):
         """Limpa e converte valores numéricos, tratando casos inválidos de forma segura."""
