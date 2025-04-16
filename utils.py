@@ -156,28 +156,31 @@ def map_csv_columns(df):
     df_mapped = df.rename(columns=mapped_columns)
     
     def clean_numeric(x):
-        """Limpa e converte valores numéricos, tratando casos inválidos."""
-        if pd.isna(x) or x == '' or x == '-':
-            return pd.NA
-        if isinstance(x, (int, float)):
-            return float(x)
+        """Limpa e converte valores numéricos, tratando casos inválidos de forma segura."""
         try:
-            # Remove caracteres não numéricos e espaços
+            # Verifica valores nulos ou vazios
+            if pd.isnull(x) or str(x).strip() in ['', '-', 'nan', 'None']:
+                return pd.NA
+                
+            # Se já for número, converte para float
+            if isinstance(x, (int, float)):
+                return float(x) if x != float('inf') else pd.NA
+                
+            # Limpa e formata a string
             value = str(x).strip()
             value = value.replace('R$', '').replace(' ', '')
             
-            # Remove pontos de milhar e troca vírgula por ponto
+            # Trata formato brasileiro (1.234,56) e outros formatos
             if ',' in value and '.' in value:
-                # Formato brasileiro (1.234,56)
                 value = value.replace('.', '').replace(',', '.')
             else:
-                # Formato com vírgula como separador decimal
                 value = value.replace(',', '.')
             
             # Converte para float
             result = float(value)
             return result if result != float('inf') else pd.NA
-        except (ValueError, TypeError):
+            
+        except Exception:
             return pd.NA
 
     def clean_percentage(x):
