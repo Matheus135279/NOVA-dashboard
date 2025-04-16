@@ -107,45 +107,142 @@ def export_to_pdf(df, charts, filename):
 def map_csv_columns(df):
     """Mapeia colunas do CSV para nomes padronizados."""
     column_mapping = {
-        # Português
-        'data': 'date',
-        'impressões': 'impressions',
-        'cliques': 'clicks',
-        'ctr': 'ctr',
-        'cpc': 'cpc',
-        'conversões': 'conversions',
-        'custo': 'cost',
-        'valor_conversão': 'conversion_value',
+        # Mapeamento Facebook Ads
+        "nome da campanha": "campaign",
+        "nome do conjunto de anúncios": "campaign",
+        "campanha": "campaign",
+        "valor usado (brl)": "cost",
+        "custo": "cost",
+        "valor gasto": "cost",
+        "dia": "date",
+        "data": "date",
+        "data do relatório": "date",
+        "cliques no link": "clicks",
+        "cliques": "clicks",
+        "cliques totais": "clicks",
+        "cpc (custo por clique no link)": "cpc",
+        "cpc": "cpc",
+        "custo por clique": "cpc",
+        "ctr (taxa de cliques no link)": "ctr",
+        "ctr": "ctr",
+        "taxa de cliques": "ctr",
+        "resultados": "conversions",
+        "conversões": "conversions",
+        "ações": "conversions",
+        "valor de conversão": "conversion_value",
+        "valor das conversões": "conversion_value",
+        "retorno": "conversion_value",
+        "impressões": "impressions",
+        "visualizações": "impressions",
+        "alcance": "impressions",
         
-        # Inglês
-        'date': 'date',
-        'impressions': 'impressions',
-        'clicks': 'clicks',
-        'ctr': 'ctr',
-        'cpc': 'cpc',
-        'conversions': 'conversions',
-        'cost': 'cost',
-        'conversion_value': 'conversion_value'
+        # Mapeamento Google Ads
+        "campaign": "campaign",
+        "ad group": "campaign",
+        "cost": "cost",
+        "date": "date",
+        "clicks": "clicks",
+        "cpc": "cpc",
+        "ctr": "ctr",
+        "conversions": "conversions",
+        "conversion value": "conversion_value",
+        "impressions": "impressions"
     }
     
     # Tenta mapear cada coluna
     mapped_columns = {}
+    missing_columns = []
+    
     for col in df.columns:
         col_lower = col.lower().strip()
         if col_lower in column_mapping:
             mapped_columns[col] = column_mapping[col_lower]
+        else:
+            missing_columns.append(col)
     
-    return df.rename(columns=mapped_columns)
+    # Se encontrou colunas não mapeadas, exibe aviso
+    if missing_columns:
+        st.warning(f"⚠️ As seguintes colunas não foram mapeadas e serão mantidas como estão: {', '.join(missing_columns)}")
+    
+    # Verifica colunas essenciais
+    essential_columns = {
+        'campaign': ['nome da campanha', 'campanha', 'campaign'],
+        'cost': ['valor usado (brl)', 'custo', 'cost'],
+        'date': ['dia', 'data', 'date'],
+        'clicks': ['cliques no link', 'cliques', 'clicks'],
+        'conversions': ['resultados', 'conversões', 'conversions']
+    }
+    
+    missing_essential = []
+    for target, sources in essential_columns.items():
+        if not any(s.lower() in [c.lower() for c in df.columns] for s in sources):
+            missing_essential.append(target)
+    
+    if missing_essential:
+        st.warning(f"⚠️ Algumas colunas importantes não foram encontradas: {', '.join(missing_essential)}")
+    
+    # Aplica o mapeamento
+    df_mapped = df.rename(columns=mapped_columns)
+    
+    # Trata valores numéricos
+    numeric_columns = ['cost', 'clicks', 'impressions', 'conversions', 'conversion_value']
+    for col in numeric_columns:
+        if col in df_mapped.columns:
+            df_mapped[col] = pd.to_numeric(df_mapped[col].astype(str).str.replace(',', '.'), errors='coerce')
+    
+    # Trata percentuais
+    percentage_columns = ['ctr']
+    for col in percentage_columns:
+        if col in df_mapped.columns:
+            df_mapped[col] = pd.to_numeric(df_mapped[col].astype(str).str.rstrip('%').str.replace(',', '.'), errors='coerce') / 100
+    
+    # Trata datas
+    if 'date' in df_mapped.columns:
+        try:
+            df_mapped['date'] = pd.to_datetime(df_mapped['date']).dt.date
+        except:
+            st.warning("⚠️ Não foi possível converter a coluna de data automaticamente.")
+    
+    return df_mapped
 
 def calculate_kpis(df):
     """Calcula KPIs principais."""
-    kpis = {
-        'Impressões': df['impressions'].sum(),
-        'Cliques': df['clicks'].sum(),
-        'CTR': (df['clicks'].sum() / df['impressions'].sum() * 100),
-        'CPC Médio': df['cost'].sum() / df['clicks'].sum(),
-        'Conversões': df['conversions'].sum(),
-        'Custo Total': df['cost'].sum(),
-        'ROAS': df['conversion_value'].sum() / df['cost'].sum()
-    }
+    kpis = {}
+    
+    # Verifica cada métrica antes de calcular
+    if 'impressions' in df.columns:
+        kpis['Impressões'] = df['impressions'].sum()
+    else:
+        kpis['Impressões'] = 0
+        
+    if 'clicks' in df.columns:
+        kpis['Cliques'] = df['clicks'].sum()
+    else:
+        kpis['Cliques'] = 0
+        
+    if 'clicks' in df.columns and 'impressions' in df.columns and df['impressions'].sum() > 0:
+        kpis['CTR'] = (df['clicks'].sum() / df['impressions'].sum() * 100)
+    else:
+        kpis['CTR'] = 0
+        
+    if 'cost' in df.columns and 'clicks' in df.columns and df['clicks'].sum() > 0:
+        kpis['CPC Médio'] = df['cost'].sum() / df['clicks'].sum()
+    else:
+        kpis['CPC Médio'] = 0
+        
+    if 'conversions' in df.columns:
+        kpis['Conversões'] = df['conversions'].sum()
+    else:
+        kpis['Conversões'] = 0
+        
+    if 'cost' in df.columns:
+        kpis['Custo Total'] = df['cost'].sum()
+    else:
+        kpis['Custo Total'] = 0
+        
+    if 'conversion_value' in df.columns and 'cost' in df.columns and df['cost'].sum() > 0:
+        kpis['ROAS'] = df['conversion_value'].sum() / df['cost'].sum()
+    else:
+        kpis['ROAS'] = 0
+        
     return kpis 
