@@ -155,57 +155,79 @@ def map_csv_columns(df):
     # Aplica o mapeamento
     df_mapped = df.rename(columns=mapped_columns)
     
-    # Função auxiliar para limpar e converter valores numéricos
-    def clean_numeric(value):
-        if pd.isna(value):
-            return 0
-        if isinstance(value, (int, float)):
-            return value
+    def clean_numeric(x):
+        """Limpa e converte valores numéricos, tratando casos inválidos."""
+        if pd.isna(x) or x == '' or x == '-':
+            return pd.NA
+        if isinstance(x, (int, float)):
+            return float(x)
         try:
-            # Remove caracteres não numéricos exceto ponto e vírgula
-            value_str = str(value).strip()
-            value_str = value_str.replace('R$', '').replace(' ', '')
-            if ',' in value_str and '.' in value_str:
-                # Caso brasileiro: 1.234,56
-                value_str = value_str.replace('.', '').replace(',', '.')
+            # Remove caracteres não numéricos e espaços
+            value = str(x).strip()
+            value = value.replace('R$', '').replace(' ', '')
+            
+            # Remove pontos de milhar e troca vírgula por ponto
+            if ',' in value and '.' in value:
+                # Formato brasileiro (1.234,56)
+                value = value.replace('.', '').replace(',', '.')
             else:
-                # Caso americano ou vírgula como separador
-                value_str = value_str.replace(',', '.')
-            return float(value_str)
-        except:
-            return 0
+                # Formato com vírgula como separador decimal
+                value = value.replace(',', '.')
+            
+            # Converte para float
+            result = float(value)
+            return result if result != float('inf') else pd.NA
+        except (ValueError, TypeError):
+            return pd.NA
 
+    def clean_percentage(x):
+        """Limpa e converte valores percentuais, tratando casos inválidos."""
+        if pd.isna(x) or x == '' or x == '-':
+            return pd.NA
+        try:
+            # Remove % e espaços
+            value = str(x).strip().rstrip('%')
+            # Converte para decimal
+            result = float(value.replace(',', '.')) / 100
+            return result if result != float('inf') else pd.NA
+        except (ValueError, TypeError):
+            return pd.NA
+    
     # Trata valores numéricos
     numeric_columns = ['cost', 'clicks', 'impressions', 'conversions', 'conversion_value']
     for col in numeric_columns:
         if col in df_mapped.columns:
             df_mapped[col] = df_mapped[col].apply(clean_numeric)
+            # Substitui NA por 0 para cálculos
+            df_mapped[col] = df_mapped[col].fillna(0)
     
     # Trata percentuais
-    def clean_percentage(value):
-        if pd.isna(value):
-            return 0
-        try:
-            value_str = str(value).strip().rstrip('%')
-            return float(value_str.replace(',', '.')) / 100
-        except:
-            return 0
-    
     percentage_columns = ['ctr']
     for col in percentage_columns:
         if col in df_mapped.columns:
             df_mapped[col] = df_mapped[col].apply(clean_percentage)
+            # Substitui NA por 0 para cálculos
+            df_mapped[col] = df_mapped[col].fillna(0)
     
     # Trata datas
     if 'date' in df_mapped.columns:
         try:
-            df_mapped['date'] = pd.to_datetime(df_mapped['date']).dt.date
+            # Primeiro tenta formato padrão
+            df_mapped['date'] = pd.to_datetime(df_mapped['date'])
         except:
             try:
                 # Tenta formato brasileiro
-                df_mapped['date'] = pd.to_datetime(df_mapped['date'], format='%d/%m/%Y').dt.date
+                df_mapped['date'] = pd.to_datetime(df_mapped['date'].str.strip(), format='%d/%m/%Y')
             except:
-                st.warning("⚠️ Não foi possível converter a coluna de data automaticamente.")
+                try:
+                    # Tenta outros formatos comuns
+                    df_mapped['date'] = pd.to_datetime(df_mapped['date'].str.strip(), format='%Y-%m-%d')
+                except:
+                    st.warning("⚠️ Não foi possível converter a coluna de data automaticamente.")
+                    return None
+        
+        # Converte para date após sucesso na conversão
+        df_mapped['date'] = df_mapped['date'].dt.date
     
     return df_mapped
 
