@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import os
 from dotenv import load_dotenv
@@ -29,7 +30,7 @@ st.markdown("""
     }
     
     /* Botões da sidebar */
-    .sidebar-button {
+    div[data-testid="stVerticalBlock"] div[data-testid="stButton"] button {
         width: 100%;
         padding: 0.5rem 1rem;
         margin: 0.25rem 0;
@@ -37,15 +38,14 @@ st.markdown("""
         background-color: rgba(255, 255, 255, 0.1);
         color: white;
         text-align: left;
-        cursor: pointer;
         transition: all 0.3s;
     }
     
-    .sidebar-button:hover {
+    div[data-testid="stVerticalBlock"] div[data-testid="stButton"] button:hover {
         background-color: rgba(255, 255, 255, 0.2);
     }
     
-    .sidebar-button.active {
+    div[data-testid="stVerticalBlock"] div[data-testid="stButton"].active button {
         background-color: rgba(255, 255, 255, 0.3);
         box-shadow: 0 0 10px rgba(255, 255, 255, 0.1);
     }
@@ -53,9 +53,22 @@ st.markdown("""
     /* Cards de métricas */
     .metric-card {
         background: rgba(255, 255, 255, 0.1);
-        padding: 1rem;
+        padding: 1.5rem;
         border-radius: 1rem;
         backdrop-filter: blur(10px);
+        margin-bottom: 1rem;
+    }
+    
+    .metric-card h3 {
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 0.9rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .metric-card h2 {
+        color: white;
+        font-size: 1.5rem;
+        margin: 0;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -69,22 +82,28 @@ if 'data' not in st.session_state:
 # Sidebar
 st.sidebar.markdown("<h2 style='text-align: center'>🎯 Ads Dashboard</h2>", unsafe_allow_html=True)
 
-# Botões da sidebar
-pages = {
-    "dashboard": "🖥️ Painel de Campanhas",
-    "upload": "📥 Upload de Arquivos",
-    "export": "📤 Exportar Relatórios",
-    "settings": "⚙️ Configurações"
-}
+# Botões da sidebar com st.button
+col = st.sidebar.container()
 
-for page_id, page_name in pages.items():
-    button_class = "sidebar-button active" if st.session_state.page == page_id else "sidebar-button"
-    if st.sidebar.markdown(f"""
-        <div class="{button_class}" onclick="document.querySelector('section.main').scrollTop=0">
-            {page_name}
-        </div>
-    """, unsafe_allow_html=True):
-        st.session_state.page = page_id
+if col.button("🖥️ Painel de Campanhas", key="btn_dashboard", 
+              help="Visualize KPIs e gráficos das campanhas",
+              use_container_width=True):
+    st.session_state.page = "dashboard"
+
+if col.button("📥 Upload de Arquivos", key="btn_upload",
+              help="Faça upload dos arquivos CSV",
+              use_container_width=True):
+    st.session_state.page = "upload"
+
+if col.button("📤 Exportar Relatórios", key="btn_export",
+              help="Exporte relatórios em Excel ou PDF",
+              use_container_width=True):
+    st.session_state.page = "export"
+
+if col.button("⚙️ Configurações", key="btn_settings",
+              help="Configure as APIs e preferências",
+              use_container_width=True):
+    st.session_state.page = "settings"
 
 # Filtros globais
 st.sidebar.markdown("---")
@@ -95,76 +114,107 @@ with col1:
 with col2:
     end_date = st.date_input("Até", datetime.now())
 
+# Funções auxiliares
+def create_distribution_chart(df, value_col, name_col, title):
+    """Cria gráfico de pizza para distribuição."""
+    fig = px.pie(
+        df.groupby(name_col)[value_col].sum().reset_index(),
+        values=value_col,
+        names=name_col,
+        title=title,
+        template='plotly_dark'
+    )
+    fig.update_layout(
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        font_color='white'
+    )
+    return fig
+
+def create_comparison_bar(df, metrics, name_col, title):
+    """Cria gráfico de barras para comparação."""
+    fig = go.Figure()
+    
+    for metric in metrics:
+        fig.add_trace(go.Bar(
+            name=metric.title(),
+            x=df[name_col],
+            y=df[metric],
+        ))
+    
+    fig.update_layout(
+        title=title,
+        template='plotly_dark',
+        barmode='group',
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        font_color='white'
+    )
+    return fig
+
 # Páginas
 if st.session_state.page == "dashboard":
     st.title("📊 Painel de Campanhas")
     
-    # Carrega dados se disponíveis
     if st.session_state.data is not None:
         df = st.session_state.data
         
-        # KPIs
+        # KPIs principais
         kpis = calculate_kpis(df)
-        cols = st.columns(3)
+        cols = st.columns(5)
         
-        with cols[0]:
-            st.markdown("""
-            <div class="metric-card">
-                <h3>Impressões</h3>
-                <h2>{}</h2>
-            </div>
-            """.format(format_number(kpis['Impressões'])), unsafe_allow_html=True)
-            
-            st.markdown("""
-            <div class="metric-card">
-                <h3>CTR</h3>
-                <h2>{:.2f}%</h2>
-            </div>
-            """.format(kpis['CTR']), unsafe_allow_html=True)
+        metrics = [
+            ("Investimento Total", format_currency(kpis['Custo Total']), "💰"),
+            ("Cliques", format_number(kpis['Cliques']), "🖱️"),
+            ("CPC Médio", format_currency(kpis['CPC Médio']), "💵"),
+            ("CTR", f"{kpis['CTR']:.2f}%", "📊"),
+            ("Conversões", format_number(kpis['Conversões']), "🎯")
+        ]
         
-        with cols[1]:
-            st.markdown("""
-            <div class="metric-card">
-                <h3>Cliques</h3>
-                <h2>{}</h2>
-            </div>
-            """.format(format_number(kpis['Cliques'])), unsafe_allow_html=True)
-            
-            st.markdown("""
-            <div class="metric-card">
-                <h3>CPC Médio</h3>
-                <h2>{}</h2>
-            </div>
-            """.format(format_currency(kpis['CPC Médio'])), unsafe_allow_html=True)
-        
-        with cols[2]:
-            st.markdown("""
-            <div class="metric-card">
-                <h3>Conversões</h3>
-                <h2>{}</h2>
-            </div>
-            """.format(format_number(kpis['Conversões'])), unsafe_allow_html=True)
-            
-            st.markdown("""
-            <div class="metric-card">
-                <h3>ROAS</h3>
-                <h2>{:.2f}x</h2>
-            </div>
-            """.format(kpis['ROAS']), unsafe_allow_html=True)
+        for col, (title, value, icon) in zip(cols, metrics):
+            with col:
+                st.markdown(f"""
+                <div class="metric-card">
+                    <h3>{icon} {title}</h3>
+                    <h2>{value}</h2>
+                </div>
+                """, unsafe_allow_html=True)
         
         # Gráficos
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("### 📊 Distribuição de Investimento")
+            fig_pie = create_distribution_chart(
+                df, 'cost', 'campaign',
+                'Distribuição de Investimento por Campanha'
+            )
+            st.plotly_chart(fig_pie, use_container_width=True)
+        
+        with col2:
+            st.markdown("### 📈 Desempenho por Campanha")
+            fig_bar = create_comparison_bar(
+                df.groupby('campaign').sum().reset_index(),
+                ['clicks', 'conversions'],
+                'campaign',
+                'Cliques e Conversões por Campanha'
+            )
+            st.plotly_chart(fig_bar, use_container_width=True)
+        
+        # Evolução temporal
         st.markdown("### 📈 Evolução Temporal")
-        evolution_metric = st.selectbox(
+        metric = st.selectbox(
             "Métrica",
-            ['impressions', 'clicks', 'conversions', 'cost']
+            ['cost', 'clicks', 'impressions', 'conversions'],
+            format_func=lambda x: x.title()
         )
         
-        fig = create_evolution_chart(
-            df,
-            evolution_metric,
-            f"Evolução de {evolution_metric.title()}"
+        fig_line = create_evolution_chart(
+            df.groupby('date')[metric].sum().reset_index(),
+            metric,
+            f'Evolução de {metric.title()}'
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig_line, use_container_width=True)
         
     else:
         st.info("Faça upload de dados na aba 'Upload de Arquivos' ou configure as APIs em 'Configurações'")
@@ -172,18 +222,39 @@ if st.session_state.page == "dashboard":
 elif st.session_state.page == "upload":
     st.title("📥 Upload de Arquivos")
     
-    uploaded_file = st.file_uploader("Escolha um arquivo CSV", type=['csv'])
+    uploaded_files = st.file_uploader(
+        "Escolha um ou mais arquivos CSV",
+        type=['csv'],
+        accept_multiple_files=True
+    )
     
-    if uploaded_file is not None:
-        df = pd.read_csv(uploaded_file)
-        df = map_csv_columns(df)
+    if uploaded_files:
+        all_data = []
         
-        st.success("Arquivo carregado com sucesso!")
-        st.write("Preview dos dados:")
-        st.dataframe(df.head())
+        for file in uploaded_files:
+            df = pd.read_csv(file)
+            
+            # Verifica colunas necessárias
+            required_columns = {
+                'date', 'impressions', 'clicks', 'ctr', 'cpc',
+                'conversions', 'cost', 'conversion_value', 'campaign'
+            }
+            
+            df = map_csv_columns(df)
+            missing_cols = required_columns - set(df.columns)
+            
+            if missing_cols:
+                st.error(f"Arquivo {file.name} não contém as colunas: {', '.join(missing_cols)}")
+                continue
+            
+            st.success(f"Arquivo {file.name} carregado com sucesso!")
+            st.write("Preview dos dados:")
+            st.dataframe(df.head())
+            
+            all_data.append(df)
         
-        if st.button("Confirmar Upload"):
-            st.session_state.data = df
+        if all_data and st.button("Confirmar Upload"):
+            st.session_state.data = pd.concat(all_data, ignore_index=True)
             st.session_state.page = "dashboard"
             st.experimental_rerun()
 
@@ -191,27 +262,33 @@ elif st.session_state.page == "export":
     st.title("📤 Exportar Relatórios")
     
     if st.session_state.data is not None:
-        export_type = st.radio("Formato de exportação", ["Excel", "PDF"])
+        col1, col2 = st.columns(2)
         
-        if export_type == "Excel":
-            if st.button("Exportar para Excel"):
-                export_to_excel(st.session_state.data, "relatorio.xlsx")
+        with col1:
+            if st.button("📥 Exportar como Excel", use_container_width=True):
+                df = st.session_state.data
+                export_to_excel(df, "relatorio_ads.xlsx")
                 st.success("Relatório Excel gerado com sucesso!")
-        else:
-            if st.button("Exportar para PDF"):
+        
+        with col2:
+            if st.button("📄 Exportar como PDF", use_container_width=True):
+                df = st.session_state.data
+                
+                # Gera gráficos para o PDF
                 charts = [
-                    create_evolution_chart(
-                        st.session_state.data,
-                        'impressions',
-                        'Evolução de Impressões'
+                    create_distribution_chart(
+                        df, 'cost', 'campaign',
+                        'Distribuição de Investimento'
                     ),
-                    create_evolution_chart(
-                        st.session_state.data,
-                        'clicks',
-                        'Evolução de Cliques'
+                    create_comparison_bar(
+                        df.groupby('campaign').sum().reset_index(),
+                        ['clicks', 'conversions'],
+                        'campaign',
+                        'Desempenho por Campanha'
                     )
                 ]
-                export_to_pdf(st.session_state.data, charts, "relatorio.pdf")
+                
+                export_to_pdf(df, charts, "relatorio_ads.pdf")
                 st.success("Relatório PDF gerado com sucesso!")
     else:
         st.info("Carregue dados primeiro na aba 'Upload de Arquivos'")
