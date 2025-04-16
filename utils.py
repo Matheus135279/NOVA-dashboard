@@ -11,17 +11,24 @@ import tempfile
 
 def format_currency(value, currency='R$'):
     """Formata valores monetários."""
-    return f"{currency} {value:,.2f}"
+    try:
+        return f"{currency} {float(value):,.2f}"
+    except (ValueError, TypeError):
+        return f"{currency} 0,00"
 
 def format_number(value, suffix=''):
     """Formata números grandes com K/M/B."""
-    if value >= 1_000_000_000:
-        return f"{value/1_000_000_000:.1f}B{suffix}"
-    elif value >= 1_000_000:
-        return f"{value/1_000_000:.1f}M{suffix}"
-    elif value >= 1_000:
-        return f"{value/1_000:.1f}K{suffix}"
-    return f"{value:.0f}{suffix}"
+    try:
+        value = float(value)
+        if value >= 1_000_000_000:
+            return f"{value/1_000_000_000:.1f}B{suffix}"
+        elif value >= 1_000_000:
+            return f"{value/1_000_000:.1f}M{suffix}"
+        elif value >= 1_000:
+            return f"{value/1_000:.1f}K{suffix}"
+        return f"{value:.0f}{suffix}"
+    except (ValueError, TypeError):
+        return f"0{suffix}"
 
 def create_evolution_chart(df, metric, title):
     """Cria gráfico de evolução temporal."""
@@ -134,6 +141,32 @@ def export_to_pdf(df, charts, filename):
             os.unlink(tmp.name)
     
     pdf.output(filename)
+
+def clean_for_display(df):
+    """Limpa o DataFrame para exibição segura no Streamlit."""
+    df_clean = df.copy()
+    
+    for col in df_clean.columns:
+        # Trata valores nulos primeiro
+        df_clean[col] = df_clean[col].fillna('')
+        
+        # Converte datas para string no formato brasileiro
+        if pd.api.types.is_datetime64_any_dtype(df_clean[col]):
+            df_clean[col] = df_clean[col].dt.strftime('%d/%m/%Y')
+        
+        # Formata números com 2 casas decimais
+        elif pd.api.types.is_float_dtype(df_clean[col]):
+            df_clean[col] = df_clean[col].apply(lambda x: f"{x:,.2f}" if pd.notnull(x) else '')
+        
+        # Formata números inteiros sem decimais
+        elif pd.api.types.is_integer_dtype(df_clean[col]):
+            df_clean[col] = df_clean[col].apply(lambda x: f"{x:,}" if pd.notnull(x) else '')
+        
+        # Converte outros tipos para string
+        elif df_clean[col].dtype == 'object':
+            df_clean[col] = df_clean[col].astype(str)
+    
+    return df_clean
 
 def map_csv_columns(df):
     """Mapeia colunas do CSV para nomes padronizados."""
@@ -281,6 +314,18 @@ def map_csv_columns(df):
         
         # Converte para date após sucesso na conversão
         df_mapped['date'] = df_mapped['date'].dt.date
+    
+    # Trata outras colunas de data
+    date_columns = ['start_date', 'end_date', 'report_start_date', 'report_end_date']
+    for date_col in date_columns:
+        if date_col in df_mapped.columns:
+            try:
+                df_mapped[date_col] = pd.to_datetime(df_mapped[date_col])
+            except:
+                try:
+                    df_mapped[date_col] = pd.to_datetime(df_mapped[date_col].str.strip(), format='%d/%m/%Y')
+                except:
+                    st.warning(f"⚠️ Não foi possível converter a coluna {date_col} para data.")
     
     return df_mapped
 
