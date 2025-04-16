@@ -134,19 +134,7 @@ def map_csv_columns(df):
         "retorno": "conversion_value",
         "impressões": "impressions",
         "visualizações": "impressions",
-        "alcance": "impressions",
-        
-        # Mapeamento Google Ads
-        "campaign": "campaign",
-        "ad group": "campaign",
-        "cost": "cost",
-        "date": "date",
-        "clicks": "clicks",
-        "cpc": "cpc",
-        "ctr": "ctr",
-        "conversions": "conversions",
-        "conversion value": "conversion_value",
-        "impressions": "impressions"
+        "alcance": "impressions"
     }
     
     # Tenta mapear cada coluna
@@ -164,44 +152,60 @@ def map_csv_columns(df):
     if missing_columns:
         st.warning(f"⚠️ As seguintes colunas não foram mapeadas e serão mantidas como estão: {', '.join(missing_columns)}")
     
-    # Verifica colunas essenciais
-    essential_columns = {
-        'campaign': ['nome da campanha', 'campanha', 'campaign'],
-        'cost': ['valor usado (brl)', 'custo', 'cost'],
-        'date': ['dia', 'data', 'date'],
-        'clicks': ['cliques no link', 'cliques', 'clicks'],
-        'conversions': ['resultados', 'conversões', 'conversions']
-    }
-    
-    missing_essential = []
-    for target, sources in essential_columns.items():
-        if not any(s.lower() in [c.lower() for c in df.columns] for s in sources):
-            missing_essential.append(target)
-    
-    if missing_essential:
-        st.warning(f"⚠️ Algumas colunas importantes não foram encontradas: {', '.join(missing_essential)}")
-    
     # Aplica o mapeamento
     df_mapped = df.rename(columns=mapped_columns)
     
+    # Função auxiliar para limpar e converter valores numéricos
+    def clean_numeric(value):
+        if pd.isna(value):
+            return 0
+        if isinstance(value, (int, float)):
+            return value
+        try:
+            # Remove caracteres não numéricos exceto ponto e vírgula
+            value_str = str(value).strip()
+            value_str = value_str.replace('R$', '').replace(' ', '')
+            if ',' in value_str and '.' in value_str:
+                # Caso brasileiro: 1.234,56
+                value_str = value_str.replace('.', '').replace(',', '.')
+            else:
+                # Caso americano ou vírgula como separador
+                value_str = value_str.replace(',', '.')
+            return float(value_str)
+        except:
+            return 0
+
     # Trata valores numéricos
     numeric_columns = ['cost', 'clicks', 'impressions', 'conversions', 'conversion_value']
     for col in numeric_columns:
         if col in df_mapped.columns:
-            df_mapped[col] = pd.to_numeric(df_mapped[col].astype(str).str.replace(',', '.'), errors='coerce')
+            df_mapped[col] = df_mapped[col].apply(clean_numeric)
     
     # Trata percentuais
+    def clean_percentage(value):
+        if pd.isna(value):
+            return 0
+        try:
+            value_str = str(value).strip().rstrip('%')
+            return float(value_str.replace(',', '.')) / 100
+        except:
+            return 0
+    
     percentage_columns = ['ctr']
     for col in percentage_columns:
         if col in df_mapped.columns:
-            df_mapped[col] = pd.to_numeric(df_mapped[col].astype(str).str.rstrip('%').str.replace(',', '.'), errors='coerce') / 100
+            df_mapped[col] = df_mapped[col].apply(clean_percentage)
     
     # Trata datas
     if 'date' in df_mapped.columns:
         try:
             df_mapped['date'] = pd.to_datetime(df_mapped['date']).dt.date
         except:
-            st.warning("⚠️ Não foi possível converter a coluna de data automaticamente.")
+            try:
+                # Tenta formato brasileiro
+                df_mapped['date'] = pd.to_datetime(df_mapped['date'], format='%d/%m/%Y').dt.date
+            except:
+                st.warning("⚠️ Não foi possível converter a coluna de data automaticamente.")
     
     return df_mapped
 
