@@ -142,6 +142,28 @@ def export_to_pdf(df, charts, filename):
     
     pdf.output(filename)
 
+def clean_numeric_column(series):
+    """
+    Limpa e converte uma série para números, tratando diferentes formatos.
+    
+    Args:
+        series (pd.Series): Série do pandas para converter
+        
+    Returns:
+        pd.Series: Série convertida para números
+    """
+    return pd.to_numeric(
+        series.astype(str)
+             .str.replace('.', '', regex=False)
+             .str.replace(',', '.', regex=False)
+             .str.replace('-', '', regex=False)
+             .str.replace('R$', '', regex=False)
+             .str.replace('%', '', regex=False)
+             .str.strip()
+             .str.extract('(\d+\.?\d*)')[0],  # extrai apenas números
+        errors='coerce'
+    ).fillna(0)
+
 def safe_dataframe_display(df, linhas=5):
     """
     Exibe DataFrame de forma segura no Streamlit, evitando erros de conversão PyArrow.
@@ -248,23 +270,31 @@ def map_csv_columns(df):
     # Aplica o mapeamento
     df_mapped = df.rename(columns=mapped_columns)
     
-    # Verifica se as colunas essenciais existem, se não, cria com valores zero
-    essential_columns = ['cost', 'clicks', 'impressions', 'conversions', 'conversion_value']
-    for col in essential_columns:
-        if col not in df_mapped.columns:
-            st.warning(f"Arquivo não contém a coluna: {col}")
-            df_mapped[col] = 0
+    # Lista de colunas numéricas para processar
+    numeric_columns = {
+        'cost': 'Custo',
+        'clicks': 'Cliques',
+        'impressions': 'Impressões',
+        'conversions': 'Conversões',
+        'conversion_value': 'Valor de Conversão',
+        'cpc': 'CPC',
+        'cpm': 'CPM',
+        'ctr': 'CTR',
+        'frequency': 'Frequência',
+        'cost_per_conversion': 'Custo por Conversão'
+    }
     
-    # Trata valores numéricos
-    numeric_columns = ['cost', 'clicks', 'impressions', 'conversions', 'conversion_value', 
-                      'frequency', 'cpm', 'cost_per_conversion']
-    for col in numeric_columns:
+    # Processa cada coluna numérica
+    for col, nome in numeric_columns.items():
         if col in df_mapped.columns:
             try:
-                df_mapped[col] = pd.to_numeric(df_mapped[col], errors='coerce').fillna(0)
-            except:
-                st.warning(f"⚠️ Não foi possível converter a coluna {col} para número.")
+                df_mapped[col] = clean_numeric_column(df_mapped[col])
+            except Exception as e:
+                st.warning(f"⚠️ Erro ao processar a coluna {nome}: {str(e)}")
                 df_mapped[col] = 0
+        else:
+            st.info(f"ℹ️ A coluna '{nome}' não está presente. O sistema continuará funcionando normalmente.")
+            df_mapped[col] = 0
     
     # Trata datas
     if 'date' in df_mapped.columns:
