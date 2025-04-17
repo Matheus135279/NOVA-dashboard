@@ -142,13 +142,68 @@ def export_to_pdf(df, charts, filename):
     
     pdf.output(filename)
 
+def safe_dataframe_display(df, linhas=5):
+    """
+    Exibe DataFrame de forma segura no Streamlit, tratando tipos problemáticos.
+    
+    Args:
+        df (pd.DataFrame): DataFrame a ser exibido
+        linhas (int): Número de linhas a mostrar (default: 5)
+    """
+    try:
+        df_copy = df.copy()
+        
+        # Trata cada coluna baseado em seu tipo
+        for col in df_copy.columns:
+            # Trata valores nulos primeiro
+            df_copy[col] = df_copy[col].fillna('N/A')
+            
+            # Identifica o tipo da coluna
+            dtype = df_copy[col].dtype
+            
+            # Trata datas
+            if pd.api.types.is_datetime64_any_dtype(dtype):
+                df_copy[col] = df_copy[col].dt.strftime('%d/%m/%Y')
+            
+            # Trata números float
+            elif pd.api.types.is_float_dtype(dtype):
+                df_copy[col] = df_copy[col].apply(lambda x: f"{x:,.2f}" if pd.notnull(x) else 'N/A')
+            
+            # Trata números inteiros
+            elif pd.api.types.is_integer_dtype(dtype):
+                df_copy[col] = df_copy[col].apply(lambda x: f"{x:,}" if pd.notnull(x) else 'N/A')
+            
+            # Trata categorias
+            elif dtype.name == 'category':
+                df_copy[col] = df_copy[col].astype(str)
+            
+            # Trata objetos e outros tipos
+            else:
+                df_copy[col] = df_copy[col].astype(str)
+        
+        # Exibe o DataFrame
+        st.dataframe(df_copy.head(linhas))
+        
+        # Mostra informações úteis
+        st.caption(f"Mostrando {min(linhas, len(df))} de {len(df)} linhas. "
+                  f"Total de colunas: {len(df.columns)}")
+        
+    except Exception as e:
+        st.error(f"❌ Erro ao exibir a prévia da tabela: {str(e)}")
+        # Log detalhado do erro (opcional)
+        st.write("Detalhes do erro:")
+        st.write({
+            "Tipos das colunas": {col: str(df[col].dtype) for col in df.columns},
+            "Erro completo": str(e)
+        })
+
 def clean_for_display(df):
     """Limpa o DataFrame para exibição segura no Streamlit."""
     df_clean = df.copy()
     
     for col in df_clean.columns:
         # Trata valores nulos primeiro
-        df_clean[col] = df_clean[col].fillna('')
+        df_clean[col] = df_clean[col].fillna('N/A')
         
         # Converte datas para string no formato brasileiro
         if pd.api.types.is_datetime64_any_dtype(df_clean[col]):
@@ -156,14 +211,18 @@ def clean_for_display(df):
         
         # Formata números com 2 casas decimais
         elif pd.api.types.is_float_dtype(df_clean[col]):
-            df_clean[col] = df_clean[col].apply(lambda x: f"{x:,.2f}" if pd.notnull(x) else '')
+            df_clean[col] = df_clean[col].apply(lambda x: f"{x:,.2f}" if pd.notnull(x) else 'N/A')
         
         # Formata números inteiros sem decimais
         elif pd.api.types.is_integer_dtype(df_clean[col]):
-            df_clean[col] = df_clean[col].apply(lambda x: f"{x:,}" if pd.notnull(x) else '')
+            df_clean[col] = df_clean[col].apply(lambda x: f"{x:,}" if pd.notnull(x) else 'N/A')
+        
+        # Converte categorias para string
+        elif df_clean[col].dtype.name == 'category':
+            df_clean[col] = df_clean[col].astype(str)
         
         # Converte outros tipos para string
-        elif df_clean[col].dtype == 'object':
+        else:
             df_clean[col] = df_clean[col].astype(str)
     
     return df_clean
