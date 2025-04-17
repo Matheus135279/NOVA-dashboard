@@ -144,7 +144,7 @@ def export_to_pdf(df, charts, filename):
 
 def safe_dataframe_display(df, linhas=5):
     """
-    Exibe DataFrame de forma segura no Streamlit, tratando tipos problemáticos.
+    Exibe DataFrame de forma segura no Streamlit, convertendo tipos problemáticos para string.
     
     Args:
         df (pd.DataFrame): DataFrame a ser exibido
@@ -152,50 +152,14 @@ def safe_dataframe_display(df, linhas=5):
     """
     try:
         df_copy = df.copy()
-        
-        # Trata cada coluna baseado em seu tipo
         for col in df_copy.columns:
-            # Trata valores nulos primeiro
-            df_copy[col] = df_copy[col].fillna('N/A')
-            
-            # Identifica o tipo da coluna
-            dtype = df_copy[col].dtype
-            
-            # Trata datas
-            if pd.api.types.is_datetime64_any_dtype(dtype):
-                df_copy[col] = df_copy[col].dt.strftime('%d/%m/%Y')
-            
-            # Trata números float
-            elif pd.api.types.is_float_dtype(dtype):
-                df_copy[col] = df_copy[col].apply(lambda x: f"{x:,.2f}" if pd.notnull(x) else 'N/A')
-            
-            # Trata números inteiros
-            elif pd.api.types.is_integer_dtype(dtype):
-                df_copy[col] = df_copy[col].apply(lambda x: f"{x:,}" if pd.notnull(x) else 'N/A')
-            
-            # Trata categorias
-            elif dtype.name == 'category':
+            # Mantém apenas colunas numéricas como estão
+            if not pd.api.types.is_numeric_dtype(df_copy[col]):
                 df_copy[col] = df_copy[col].astype(str)
-            
-            # Trata objetos e outros tipos
-            else:
-                df_copy[col] = df_copy[col].astype(str)
-        
-        # Exibe o DataFrame
         st.dataframe(df_copy.head(linhas))
-        
-        # Mostra informações úteis
-        st.caption(f"Mostrando {min(linhas, len(df))} de {len(df)} linhas. "
-                  f"Total de colunas: {len(df.columns)}")
-        
+        st.caption(f"Mostrando {min(linhas, len(df))} de {len(df)} linhas")
     except Exception as e:
-        st.error(f"❌ Erro ao exibir a prévia da tabela: {str(e)}")
-        # Log detalhado do erro (opcional)
-        st.write("Detalhes do erro:")
-        st.write({
-            "Tipos das colunas": {col: str(df[col].dtype) for col in df.columns},
-            "Erro completo": str(e)
-        })
+        st.error(f"❌ Erro ao exibir a prévia dos dados: {e}")
 
 def clean_for_display(df):
     """Limpa o DataFrame para exibição segura no Streamlit."""
@@ -240,10 +204,6 @@ def map_csv_columns(df):
         "dia": "date",
         "data": "date",
         "data do relatório": "date",
-        "início": "start_date",
-        "término": "end_date",
-        "início dos relatórios": "report_start_date",
-        "término dos relatórios": "report_end_date",
         "cliques no link": "clicks",
         "cliques": "clicks",
         "cliques totais": "clicks",
@@ -256,8 +216,6 @@ def map_csv_columns(df):
         "resultados": "conversions",
         "conversões": "conversions",
         "ações": "conversions",
-        "tipo de resultado": "conversion_type",
-        "custo por resultado": "cost_per_conversion",
         "valor de conversão": "conversion_value",
         "valor das conversões": "conversion_value",
         "retorno": "conversion_value",
@@ -269,7 +227,9 @@ def map_csv_columns(df):
         "objetivo": "objective",
         "veiculação da campanha": "campaign_delivery",
         "orçamento da campanha": "campaign_budget",
-        "tipo de orçamento da campanha": "campaign_budget_type"
+        "tipo de orçamento da campanha": "campaign_budget_type",
+        "tipo de resultado": "conversion_type",
+        "custo por resultado": "cost_per_conversion"
     }
     
     # Tenta mapear cada coluna
