@@ -144,29 +144,35 @@ def export_to_pdf(df, charts, filename):
 
 def clean_numeric_column(series):
     """
-    Limpa e converte uma série para números, tratando diferentes formatos.
+    Converte uma série para números de forma segura, tratando diferentes formatos.
     
     Args:
-        series (pd.Series): Série do pandas para converter
+        series: pd.Series ou valor único para converter
         
     Returns:
-        pd.Series: Série convertida para números
+        pd.Series: Série convertida para números, com valores inválidos preenchidos com 0
     """
-    return pd.to_numeric(
-        series.astype(str)
-             .str.replace('.', '', regex=False)
-             .str.replace(',', '.', regex=False)
-             .str.replace('-', '', regex=False)
-             .str.replace('R$', '', regex=False)
-             .str.replace('%', '', regex=False)
-             .str.strip()
-             .str.extract('(\d+\.?\d*)')[0],  # extrai apenas números
-        errors='coerce'
-    ).fillna(0)
+    if not isinstance(series, pd.Series):
+        return series
+
+    series_str = series.astype(str)
+
+    # Só aplica .str.replace se a série for do tipo object ou string
+    if pd.api.types.is_string_dtype(series_str):
+        series_str = series_str.str.replace('.', '', regex=False)
+        series_str = series_str.str.replace(',', '.', regex=False)
+        series_str = series_str.str.replace('-', '', regex=False)
+        series_str = series_str.str.replace('R$', '', regex=False)
+        series_str = series_str.str.replace('%', '', regex=False)
+        series_str = series_str.str.strip()
+        # Extrai apenas números com ponto decimal opcional
+        series_str = series_str.str.extract(r'(\d+\.?\d*)')[0]
+
+    return pd.to_numeric(series_str, errors='coerce').fillna(0)
 
 def safe_dataframe_display(df, linhas=5):
     """
-    Exibe DataFrame de forma segura no Streamlit, evitando erros de conversão PyArrow.
+    Exibe DataFrame de forma segura no Streamlit, evitando erros de conversão.
     
     Args:
         df (pd.DataFrame): DataFrame a ser exibido
@@ -179,7 +185,7 @@ def safe_dataframe_display(df, linhas=5):
                 df_copy[col] = df_copy[col].astype(str)
         st.dataframe(df_copy.head(linhas))
     except Exception as e:
-        st.error(f"❌ Erro ao exibir os dados: {e}")
+        st.error(f"Erro ao exibir o dataframe: {e}")
 
 def clean_for_display(df):
     """Limpa o DataFrame para exibição segura no Streamlit."""
@@ -212,7 +218,7 @@ def clean_for_display(df):
     return df_clean
 
 def map_csv_columns(df):
-    """Mapeia colunas do CSV para nomes padronizados."""
+    """Mapeia colunas do CSV para nomes padronizados e converte tipos."""
     column_mapping = {
         # Mapeamento Facebook Ads
         "nome da campanha": "campaign",
@@ -270,7 +276,7 @@ def map_csv_columns(df):
     # Aplica o mapeamento
     df_mapped = df.rename(columns=mapped_columns)
     
-    # Lista de colunas numéricas para processar
+    # Define colunas numéricas e seus nomes amigáveis
     numeric_columns = {
         'cost': 'Custo',
         'clicks': 'Cliques',
@@ -284,7 +290,7 @@ def map_csv_columns(df):
         'cost_per_conversion': 'Custo por Conversão'
     }
     
-    # Processa cada coluna numérica
+    # Processa cada coluna numérica de forma segura
     for col, nome in numeric_columns.items():
         if col in df_mapped.columns:
             try:
@@ -293,10 +299,10 @@ def map_csv_columns(df):
                 st.warning(f"⚠️ Erro ao processar a coluna {nome}: {str(e)}")
                 df_mapped[col] = 0
         else:
-            st.info(f"ℹ️ A coluna '{nome}' não está presente. O sistema continuará funcionando normalmente.")
+            st.info(f"ℹ️ A coluna '{nome}' não está presente no arquivo.")
             df_mapped[col] = 0
     
-    # Trata datas
+    # Trata datas de forma segura
     if 'date' in df_mapped.columns:
         try:
             df_mapped['date'] = pd.to_datetime(df_mapped['date'])
