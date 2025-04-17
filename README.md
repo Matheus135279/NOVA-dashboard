@@ -1,65 +1,102 @@
-# Dashboard de Anúncios
+# Dashboard de Performance de Anúncios
 
-Dashboard interativo para visualização de dados de campanhas do Facebook Ads e Google Ads.
+Uma dashboard interativa para análise de performance de campanhas de anúncios do Facebook Ads e Google Ads, construída com Streamlit.
 
-## 🚀 Como usar
+## Funcionalidades
 
-1. Instale as dependências:
+- Visualização de métricas importantes de campanhas publicitárias
+- Integração com Facebook Ads e Google Ads
+- Suporte para upload manual de arquivos CSV
+- Gráficos interativos com Plotly
+- Exportação de relatórios em Excel e PDF
+- Filtros por data, plataforma e campanha
+- Interface responsiva e moderna
+- Sistema de autenticação básico
+
+## Requisitos
+
+- Python 3.8+
+- Pip (gerenciador de pacotes Python)
+- Credenciais de API do Facebook Ads e Google Ads
+
+## Instalação
+
+1. Clone o repositório:
+```bash
+git clone [URL_DO_REPOSITORIO]
+cd ads_dashboard
+```
+
+2. Crie um ambiente virtual (recomendado):
+```bash
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+venv\Scripts\activate     # Windows
+```
+
+3. Instale as dependências:
 ```bash
 pip install -r requirements.txt
 ```
 
-2. Execute o dashboard:
+4. Configure as variáveis de ambiente:
+   - Copie o arquivo `.env.example` para `.env`
+   - Preencha as credenciais necessárias no arquivo `.env`
+
+## Configuração das APIs
+
+### Facebook Ads
+1. Crie um app no Facebook Developers
+2. Obtenha o Access Token com permissões de ads_read
+3. Configure as credenciais no arquivo `.env`
+
+### Google Ads
+1. Configure uma conta Google Ads API
+2. Crie credenciais OAuth 2.0
+3. Configure o arquivo `.env` com as credenciais
+
+## Uso
+
+1. Ative o ambiente virtual:
+```bash
+source venv/bin/activate  # Linux/Mac
+venv\Scripts\activate     # Windows
+```
+
+2. Execute a aplicação:
 ```bash
 streamlit run app.py
 ```
 
-3. Para usar com arquivos CSV:
-   - Acesse a aba "📥 Upload de Arquivos"
-   - Faça upload do seu arquivo CSV do Facebook Ads ou Google Ads
-   - O sistema reconhece automaticamente as colunas em português ou inglês
+3. Acesse a dashboard no navegador:
+```
+http://localhost:8501
+```
 
-## 📊 Formato dos arquivos CSV
+## Estrutura do Projeto
 
-### Facebook Ads
-O arquivo deve conter as seguintes colunas (em português ou inglês):
-- data/date
-- impressões/impressions
-- cliques/clicks
-- ctr
-- cpc
-- conversões/conversions
-- custo/cost
-- valor_conversão/conversion_value
-- campanha/campaign (opcional)
+```
+ads_dashboard/
+├── app.py              # Aplicação principal Streamlit
+├── api_connectors.py   # Conectores para APIs
+├── utils.py           # Funções utilitárias
+├── requirements.txt   # Dependências do projeto
+├── .env.example      # Template de variáveis de ambiente
+└── README.md         # Documentação
+```
 
-### Google Ads
-O arquivo deve conter as mesmas colunas, mas preferencialmente em inglês:
-- date
-- impressions
-- clicks
-- ctr
-- cpc
-- conversions
-- cost
-- conversion_value
-- campaign (opcional)
+## Contribuindo
 
-## 📝 Exemplos
-Incluímos dois arquivos de exemplo para referência:
-- `exemplo_facebook_ads.csv`: Exemplo de dados do Facebook Ads
-- `exemplo_google_ads.csv`: Exemplo de dados do Google Ads
+1. Fork o projeto
+2. Crie uma branch para sua feature (`git checkout -b feature/AmazingFeature`)
+3. Commit suas mudanças (`git commit -m 'Add some AmazingFeature'`)
+4. Push para a branch (`git push origin feature/AmazingFeature`)
+5. Abra um Pull Request
 
-## 🔑 Configuração de APIs (Opcional)
-Se quiser conectar diretamente com as APIs:
-1. Copie o arquivo `.env.example` para `.env`
-2. Preencha suas credenciais no arquivo `.env`
-3. Acesse a aba "⚙️ Configurações" para configurar as APIs
+## Licença
 
-## 📱 Funcionalidades
-- Visualização de KPIs principais
-- Gráficos de evolução temporal
-- Exportação de relatórios em Excel e PDF
-- Suporte a múltiplas campanhas
-- Interface responsiva e moderna
-- Filtros por data 
+Este projeto está licenciado sob a licença MIT - veja o arquivo [LICENSE](LICENSE) para detalhes.
+
+## Suporte
+
+Para suporte, envie um email para [seu-email@exemplo.com] ou abra uma issue no repositório.
