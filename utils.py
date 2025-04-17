@@ -144,7 +144,7 @@ def export_to_pdf(df, charts, filename):
 
 def safe_dataframe_display(df, linhas=5):
     """
-    Exibe DataFrame de forma segura no Streamlit, convertendo tipos problemáticos para string.
+    Exibe DataFrame de forma segura no Streamlit, evitando erros de conversão PyArrow.
     
     Args:
         df (pd.DataFrame): DataFrame a ser exibido
@@ -153,13 +153,11 @@ def safe_dataframe_display(df, linhas=5):
     try:
         df_copy = df.copy()
         for col in df_copy.columns:
-            # Mantém apenas colunas numéricas como estão
             if not pd.api.types.is_numeric_dtype(df_copy[col]):
                 df_copy[col] = df_copy[col].astype(str)
         st.dataframe(df_copy.head(linhas))
-        st.caption(f"Mostrando {min(linhas, len(df))} de {len(df)} linhas")
     except Exception as e:
-        st.error(f"❌ Erro ao exibir a prévia dos dados: {e}")
+        st.error(f"❌ Erro ao exibir os dados: {e}")
 
 def clean_for_display(df):
     """Limpa o DataFrame para exibição segura no Streamlit."""
@@ -257,94 +255,27 @@ def map_csv_columns(df):
             st.warning(f"Arquivo não contém a coluna: {col}")
             df_mapped[col] = 0
     
-    def clean_numeric(x):
-        """Limpa e converte valores numéricos, tratando casos inválidos de forma segura."""
-        try:
-            # Verifica valores nulos ou vazios
-            if pd.isnull(x) or str(x).strip() in ['', '-', 'nan', 'None']:
-                return pd.NA
-                
-            # Se já for número, converte para float
-            if isinstance(x, (int, float)):
-                return float(x) if x != float('inf') else pd.NA
-                
-            # Limpa e formata a string
-            value = str(x).strip()
-            value = value.replace('R$', '').replace(' ', '')
-            
-            # Trata formato brasileiro (1.234,56) e outros formatos
-            if ',' in value and '.' in value:
-                value = value.replace('.', '').replace(',', '.')
-            else:
-                value = value.replace(',', '.')
-            
-            # Converte para float
-            result = float(value)
-            return result if result != float('inf') else pd.NA
-            
-        except Exception:
-            return pd.NA
-
-    def clean_percentage(x):
-        """Limpa e converte valores percentuais, tratando casos inválidos."""
-        if pd.isna(x) or x == '' or x == '-':
-            return pd.NA
-        try:
-            # Remove % e espaços
-            value = str(x).strip().rstrip('%')
-            # Converte para decimal
-            result = float(value.replace(',', '.')) / 100
-            return result if result != float('inf') else pd.NA
-        except (ValueError, TypeError):
-            return pd.NA
-    
     # Trata valores numéricos
-    numeric_columns = ['cost', 'clicks', 'impressions', 'conversions', 'conversion_value']
+    numeric_columns = ['cost', 'clicks', 'impressions', 'conversions', 'conversion_value', 
+                      'frequency', 'cpm', 'cost_per_conversion']
     for col in numeric_columns:
         if col in df_mapped.columns:
-            df_mapped[col] = df_mapped[col].apply(clean_numeric)
-            # Substitui NA por 0 para cálculos
-            df_mapped[col] = df_mapped[col].fillna(0)
-    
-    # Trata percentuais
-    percentage_columns = ['ctr']
-    for col in percentage_columns:
-        if col in df_mapped.columns:
-            df_mapped[col] = df_mapped[col].apply(clean_percentage)
-            # Substitui NA por 0 para cálculos
-            df_mapped[col] = df_mapped[col].fillna(0)
+            try:
+                df_mapped[col] = pd.to_numeric(df_mapped[col], errors='coerce').fillna(0)
+            except:
+                st.warning(f"⚠️ Não foi possível converter a coluna {col} para número.")
+                df_mapped[col] = 0
     
     # Trata datas
     if 'date' in df_mapped.columns:
         try:
-            # Primeiro tenta formato padrão
             df_mapped['date'] = pd.to_datetime(df_mapped['date'])
         except:
             try:
-                # Tenta formato brasileiro
-                df_mapped['date'] = pd.to_datetime(df_mapped['date'].str.strip(), format='%d/%m/%Y')
+                df_mapped['date'] = pd.to_datetime(df_mapped['date'], format='%d/%m/%Y')
             except:
-                try:
-                    # Tenta outros formatos comuns
-                    df_mapped['date'] = pd.to_datetime(df_mapped['date'].str.strip(), format='%Y-%m-%d')
-                except:
-                    st.warning("⚠️ Não foi possível converter a coluna de data automaticamente.")
-                    return None
-        
-        # Converte para date após sucesso na conversão
-        df_mapped['date'] = df_mapped['date'].dt.date
-    
-    # Trata outras colunas de data
-    date_columns = ['start_date', 'end_date', 'report_start_date', 'report_end_date']
-    for date_col in date_columns:
-        if date_col in df_mapped.columns:
-            try:
-                df_mapped[date_col] = pd.to_datetime(df_mapped[date_col])
-            except:
-                try:
-                    df_mapped[date_col] = pd.to_datetime(df_mapped[date_col].str.strip(), format='%d/%m/%Y')
-                except:
-                    st.warning(f"⚠️ Não foi possível converter a coluna {date_col} para data.")
+                st.warning("⚠️ Não foi possível converter a coluna de data.")
+                df_mapped['date'] = pd.NaT
     
     return df_mapped
 
