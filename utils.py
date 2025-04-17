@@ -147,45 +147,86 @@ def clean_numeric_column(series):
     Converte uma série para números de forma segura, tratando diferentes formatos.
     
     Args:
-        series: pd.Series ou valor único para converter
+        series (pd.Series): Série para converter
         
     Returns:
-        pd.Series: Série convertida para números, com valores inválidos preenchidos com 0
+        pd.Series: Série convertida para números
     """
-    if not isinstance(series, pd.Series):
-        return series
+    series = series.astype(str).str.replace('.', '', regex=False)
+    series = series.str.replace(',', '.', regex=False)
+    series = series.str.extract(r'(\d+\.?\d*)')[0]
+    return pd.to_numeric(series, errors='coerce').fillna(0)
 
-    series_str = series.astype(str)
-
-    # Só aplica .str.replace se a série for do tipo object ou string
-    if pd.api.types.is_string_dtype(series_str):
-        series_str = series_str.str.replace('.', '', regex=False)
-        series_str = series_str.str.replace(',', '.', regex=False)
-        series_str = series_str.str.replace('-', '', regex=False)
-        series_str = series_str.str.replace('R$', '', regex=False)
-        series_str = series_str.str.replace('%', '', regex=False)
-        series_str = series_str.str.strip()
-        # Extrai apenas números com ponto decimal opcional
-        series_str = series_str.str.extract(r'(\d+\.?\d*)')[0]
-
-    return pd.to_numeric(series_str, errors='coerce').fillna(0)
+def sanitize_dataframe(df):
+    """
+    Limpa e padroniza tipos de dados no DataFrame para exibição segura no Streamlit.
+    
+    Args:
+        df (pd.DataFrame): DataFrame original
+        
+    Returns:
+        pd.DataFrame: DataFrame limpo e padronizado
+    """
+    df_clean = df.copy()
+    
+    # Lista de colunas que devem ser numéricas
+    numeric_columns = [
+        'spend', 'cost', 'clicks', 'impressions', 'conversions',
+        'cpc', 'ctr', 'cpm', 'frequency', 'cost_per_conversion',
+        'conversion_value'
+    ]
+    
+    for col in df_clean.columns:
+        col_lower = col.lower()
+        
+        # Trata colunas numéricas conhecidas
+        if col_lower in numeric_columns:
+            try:
+                df_clean[col] = clean_numeric_column(df_clean[col])
+            except Exception:
+                df_clean[col] = 0
+                st.warning(f"⚠️ A coluna '{col}' contém valores inválidos e foi preenchida com zeros.")
+        
+        # Trata colunas de data
+        elif col_lower in ['date', 'data']:
+            try:
+                df_clean[col] = pd.to_datetime(df_clean[col]).dt.strftime('%d/%m/%Y')
+            except Exception:
+                df_clean[col] = 'Data inválida'
+                st.warning(f"⚠️ A coluna '{col}' contém datas inválidas.")
+        
+        # Converte outras colunas para string
+        else:
+            df_clean[col] = df_clean[col].astype(str)
+    
+    return df_clean
 
 def safe_dataframe_display(df, linhas=5):
     """
     Exibe DataFrame de forma segura no Streamlit, evitando erros de conversão.
     
     Args:
-        df (pd.DataFrame): DataFrame a ser exibido
+        df (pd.DataFrame): DataFrame para exibir
         linhas (int): Número de linhas a mostrar (default: 5)
     """
     try:
-        df_copy = df.copy()
-        for col in df_copy.columns:
-            if not pd.api.types.is_numeric_dtype(df_copy[col]):
-                df_copy[col] = df_copy[col].astype(str)
-        st.dataframe(df_copy.head(linhas))
+        if df is None or df.empty:
+            st.warning("⚠️ Não há dados para exibir.")
+            return
+            
+        df_clean = sanitize_dataframe(df)
+        
+        # Exibe o DataFrame
+        st.dataframe(df_clean.head(linhas))
+        
+        # Mostra informações úteis
+        st.caption(f"Mostrando {min(linhas, len(df))} de {len(df)} linhas. "
+                  f"Total de colunas: {len(df.columns)}")
+        
     except Exception as e:
-        st.error(f"Erro ao exibir o dataframe: {e}")
+        st.error("❌ Erro ao exibir os dados. Verifique se há colunas ou células com valores incompatíveis.")
+        if st.checkbox("Mostrar detalhes do erro"):
+            st.exception(e)
 
 def clean_for_display(df):
     """Limpa o DataFrame para exibição segura no Streamlit."""
@@ -276,42 +317,8 @@ def map_csv_columns(df):
     # Aplica o mapeamento
     df_mapped = df.rename(columns=mapped_columns)
     
-    # Define colunas numéricas e seus nomes amigáveis
-    numeric_columns = {
-        'cost': 'Custo',
-        'clicks': 'Cliques',
-        'impressions': 'Impressões',
-        'conversions': 'Conversões',
-        'conversion_value': 'Valor de Conversão',
-        'cpc': 'CPC',
-        'cpm': 'CPM',
-        'ctr': 'CTR',
-        'frequency': 'Frequência',
-        'cost_per_conversion': 'Custo por Conversão'
-    }
-    
-    # Processa cada coluna numérica de forma segura
-    for col, nome in numeric_columns.items():
-        if col in df_mapped.columns:
-            try:
-                df_mapped[col] = clean_numeric_column(df_mapped[col])
-            except Exception as e:
-                st.warning(f"⚠️ Erro ao processar a coluna {nome}: {str(e)}")
-                df_mapped[col] = 0
-        else:
-            st.info(f"ℹ️ A coluna '{nome}' não está presente no arquivo.")
-            df_mapped[col] = 0
-    
-    # Trata datas de forma segura
-    if 'date' in df_mapped.columns:
-        try:
-            df_mapped['date'] = pd.to_datetime(df_mapped['date'])
-        except:
-            try:
-                df_mapped['date'] = pd.to_datetime(df_mapped['date'], format='%d/%m/%Y')
-            except:
-                st.warning("⚠️ Não foi possível converter a coluna de data.")
-                df_mapped['date'] = pd.NaT
+    # Limpa e padroniza o DataFrame
+    df_mapped = sanitize_dataframe(df_mapped)
     
     return df_mapped
 
